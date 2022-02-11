@@ -84,8 +84,13 @@ def run(
             return False
 
     logger.info(
-        f"Container image '{', '.join(container.image.tags)}' started with name '{container.name}' in "
+        f"Container image '{', '.join(container.image.tags)}' starting with name '{container.name}' in "
         f"Kubernetes namespace '{namespace}'"
+    )
+
+    container = config.DOCKER.containers.get(container.name)
+    logger.info(
+        f"Local IP: {container.attrs['NetworkSettings']['Networks']['gefyra']['IPAddress']}"
     )
     if detach:
         return True
