@@ -1,48 +1,38 @@
-import logging
-import time
+from gefyra import lazy
 
-from kubernetes.client import (
-    V1ServiceAccount,
-    V1ClusterRole,
-    ApiException,
-    V1ClusterRoleBinding,
-    V1Deployment,
-    V1Namespace,
-    V1ObjectMeta,
-)
-from kubernetes.watch import Watch
+logging = lazy("logging")
+time = lazy("time")
 
-from gefyra.configuration import ClientConfiguration
+kubernetes = lazy("kubernetes")
 
-from .resources import (
-    create_operator_clusterrole,
-    create_operator_clusterrolebinding,
-    create_operator_deployment,
-    create_operator_serviceaccount,
-)
-from .utils import decode_secret
+gefyra = lazy("gefyra")
+
 
 logger = logging.getLogger(__name__)
 
 
 def handle_serviceaccount(
-    config: ClientConfiguration, serviceaccount: V1ServiceAccount
+    config: gefyra.configuration.ClientConfiguration,
+    serviceaccount: kubernetes.client.V1ServiceAccount,
 ):
     try:
         config.K8S_CORE_API.create_namespaced_service_account(
             body=serviceaccount, namespace=config.NAMESPACE
         )
-    except ApiException as e:
+    except kubernetes.client.ApiException as e:
         if e.status == 409:
             pass
         else:
             raise e
 
 
-def handle_clusterrole(config: ClientConfiguration, clusterrole: V1ClusterRole):
+def handle_clusterrole(
+    config: gefyra.configuration.ClientConfiguration,
+    clusterrole: kubernetes.client.V1ClusterRole,
+):
     try:
         config.K8S_RBAC_API.create_cluster_role(body=clusterrole)
-    except ApiException as e:
+    except kubernetes.client.ApiException as e:
         if e.status == 409:
             pass
         else:
@@ -50,11 +40,12 @@ def handle_clusterrole(config: ClientConfiguration, clusterrole: V1ClusterRole):
 
 
 def handle_clusterrolebinding(
-    config: ClientConfiguration, clusterrolebinding: V1ClusterRoleBinding
+    config: gefyra.configuration.ClientConfiguration,
+    clusterrolebinding: kubernetes.client.V1ClusterRoleBinding,
 ):
     try:
         config.K8S_RBAC_API.create_cluster_role_binding(body=clusterrolebinding)
-    except ApiException as e:
+    except kubernetes.client.ApiException as e:
         if e.status == 409:
             pass
         else:
@@ -62,45 +53,52 @@ def handle_clusterrolebinding(
 
 
 def handle_deployment(
-    config: ClientConfiguration, operator_deployment: V1Deployment
+    config: gefyra.configuration.ClientConfiguration,
+    operator_deployment: kubernetes.client.V1Deployment,
 ) -> bool:
     try:
         config.K8S_APP_API.create_namespaced_deployment(
             body=operator_deployment, namespace=config.NAMESPACE
         )
         return True
-    except ApiException as e:
+    except kubernetes.client.ApiException as e:
         if e.status == 409:
             return False
         else:
             raise e
 
 
-def install_operator(config: ClientConfiguration, gefyra_network_subnet: str) -> dict:
+def install_operator(
+    config: gefyra.configuration.ClientConfiguration, gefyra_network_subnet: str
+) -> dict:
     """
     Installs Gefyra Operator to the configured cluster, waits for the installation to complete and returns the
     connection secrets for Cargo
-    :param config: a ClientConfiguration install
+    :param config: a gefyra.configuration.ClientConfiguration install
     :return: Cargo connection details
     """
     tic = time.perf_counter()
     try:
         config.K8S_CORE_API.create_namespace(
-            body=V1Namespace(metadata=V1ObjectMeta(name=config.NAMESPACE))
+            body=kubernetes.client.V1Namespace(
+                metadata=kubernetes.client.V1ObjectMeta(name=config.NAMESPACE)
+            )
         )
-    except ApiException as e:
+    except kubernetes.client.ApiException as e:
         if e.status == 409:
             # namespace does already exist
             pass
         else:
             raise e
 
-    serviceaccount = create_operator_serviceaccount(config.NAMESPACE)
-    clusterrole = create_operator_clusterrole()
-    clusterrolebinding = create_operator_clusterrolebinding(
+    serviceaccount = gefyra.cluster.ressources.create_operator_serviceaccount(
+        config.NAMESPACE
+    )
+    clusterrole = gefyra.cluster.resources.create_operator_clusterrole()
+    clusterrolebinding = gefyra.cluster.resources.create_operator_clusterrolebinding(
         serviceaccount, clusterrole, config.NAMESPACE
     )
-    operator_deployment = create_operator_deployment(
+    operator_deployment = gefyra.cluster.ressources.create_operator_deployment(
         serviceaccount, config.NAMESPACE, f"{gefyra_network_subnet}/24"
     )
     handle_serviceaccount(config, serviceaccount)
@@ -109,7 +107,7 @@ def install_operator(config: ClientConfiguration, gefyra_network_subnet: str) ->
     created = handle_deployment(config, operator_deployment)
 
     if created:
-        w = Watch()
+        w = kubernetes.watch.Watch()
 
         # block (forever) until Gefyra cluster side is ready
         for event in w.stream(
@@ -127,19 +125,21 @@ def install_operator(config: ClientConfiguration, gefyra_network_subnet: str) ->
     cargo_connection_secret = config.K8S_CORE_API.read_namespaced_secret(
         name="gefyra-cargo-connection", namespace=config.NAMESPACE
     )
-    values = decode_secret(cargo_connection_secret.data)
+    values = gefyra.cluster.utils.decode_secret(cargo_connection_secret.data)
     logger.debug("Cargo connection details")
     logger.debug(values)
     return values
 
 
-def uninstall_operator(config: ClientConfiguration):
-    serviceaccount = create_operator_serviceaccount(config.NAMESPACE)
-    clusterrole = create_operator_clusterrole()
-    clusterrolebinding = create_operator_clusterrolebinding(
+def uninstall_operator(config: gefyra.configuration.ClientConfiguration):
+    serviceaccount = gefyra.cluster.ressources.create_operator_serviceaccount(
+        config.NAMESPACE
+    )
+    clusterrole = gefyra.cluster.resources.create_operator_clusterrole()
+    clusterrolebinding = gefyra.cluster.resources.create_operator_clusterrolebinding(
         serviceaccount, clusterrole, config.NAMESPACE
     )
-    operator_deployment = create_operator_deployment(
+    operator_deployment = gefyra.cluster.ressources.create_operator_deployment(
         serviceaccount, config.NAMESPACE, ""
     )
     try:
@@ -155,12 +155,12 @@ def uninstall_operator(config: ClientConfiguration):
         config.K8S_RBAC_API.delete_cluster_role_binding(
             name=clusterrolebinding.metadata.name
         )
-    except ApiException:
+    except kubernetes.client.ApiException:
         pass
 
     try:
         config.K8S_CORE_API.delete_namespace(name=config.NAMESPACE)
-    except ApiException as e:
+    except kubernetes.client.ApiException as e:
         if e.status == 404:
             pass
         else:

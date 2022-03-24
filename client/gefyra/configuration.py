@@ -1,7 +1,9 @@
-import struct
-import socket
-import sys
-import logging
+from gefyra import lazy
+
+struct = lazy("struct")
+sys = lazy("sys")
+logging = lazy("logging")
+
 
 console = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter("[%(levelname)s] %(message)s")
@@ -40,6 +42,7 @@ class ClientConfiguration(object):
             else:
                 # get linux docker0 network address
                 import fcntl
+                import socket
 
                 _soc = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 _ip = socket.inet_ntoa(

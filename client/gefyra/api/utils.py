@@ -1,5 +1,7 @@
-import logging
-import time
+from gefyra import lazy
+
+logging = lazy("logging")
+time = lazy("time")
 
 logger = logging.getLogger(__name__)
 

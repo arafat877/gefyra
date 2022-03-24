@@ -1,10 +1,15 @@
-import logging
-from datetime import datetime
-from typing import List
+from gefyra import lazy
 
-from gefyra.configuration import default_configuration
+logging = lazy("logging")
+datetime = lazy("datetime")
+typing = lazy("typing")
 
-from .utils import stopwatch
+docker = lazy("docker")
+kubernetes = lazy("kubernetes")
+
+gefyra = lazy("gefyra")
+
+from .utils import stopwatch  # noqa
 
 logger = logging.getLogger(__name__)
 
@@ -12,22 +17,21 @@ logger = logging.getLogger(__name__)
 @stopwatch
 def bridge(
     name: str,
-    ports: List[str],
+    ports: typing.List[str],
     deployment: str = None,
     statefulset: str = None,
     pod: str = None,
     container_name: str = None,
     namespace: str = "default",
     bridge_name: str = None,
-    sync_down_dirs: List[str] = None,
+    sync_down_dirs: typing.List[str] = None,
     handle_probes: bool = True,
-    config=default_configuration,
+    config=gefyra.configuration.default_configuration,
 ) -> bool:
-    from docker.errors import NotFound
 
     try:
         container = config.DOCKER.containers.get(name)
-    except NotFound:
+    except docker.errors.NotFound:
         logger.error(f"Could not find target container '{name}'")
         return False
 
@@ -44,12 +48,18 @@ def bridge(
 
     pods_to_intercept = []
 
-    from gefyra.cluster.resources import get_pods_for_workload
-
     if deployment:
-        pods_to_intercept.extend(get_pods_for_workload(config, deployment, namespace))
+        pods_to_intercept.extend(
+            gefyra.cluster.resources.get_pods_for_workload(
+                config, deployment, namespace
+            )
+        )
     if statefulset:
-        pods_to_intercept.extend(get_pods_for_workload(config, statefulset, namespace))
+        pods_to_intercept.extend(
+            gefyra.cluster.resources.get_pods_for_workload(
+                config, statefulset, namespace
+            )
+        )
     if pod:
         pods_to_intercept.extend(pod)
     pass
@@ -78,8 +88,6 @@ def bridge(
         handle_create_interceptrequest,
     )
 
-    from gefyra.local.cargo import add_syncdown_job
-
     ireqs = []
     for idx, pod in enumerate(pods_to_intercept):
         logger.info(f"Creating bridge for Pod {pod}")
@@ -97,7 +105,7 @@ def bridge(
         ireq = handle_create_interceptrequest(config, ireq_body)
         logger.debug(f"Bridge {ireq['metadata']['name']} created")
         for syncdown_dir in sync_down_dirs:
-            add_syncdown_job(
+            gefyra.local.cargo.add_syncdown_job(
                 config,
                 ireq["metadata"]["name"],
                 name,
@@ -110,9 +118,8 @@ def bridge(
     # block until all bridges are in place
     #
     logger.info("Waiting for the bridge(s) to become active")
-    from kubernetes.watch import Watch
 
-    w = Watch()
+    w = kubernetes.watch.Watch()
     for event in w.stream(
         config.K8S_CORE_API.list_namespaced_event, namespace=config.NAMESPACE
     ):
@@ -130,11 +137,9 @@ def bridge(
 @stopwatch
 def unbridge(
     name: str,
-    config=default_configuration,
+    config=gefyra.configuration.default_configuration,
 ) -> bool:
-    from gefyra.local.bridge import handle_delete_interceptrequest
-
-    success = handle_delete_interceptrequest(config, name)
+    success = gefyra.local.bridge.handle_delete_interceptrequest(config, name)
     if success:
         logger.info(f"Bridge {name} removed")
     return True
@@ -142,16 +147,11 @@ def unbridge(
 
 @stopwatch
 def unbridge_all(
-    config=default_configuration,
+    config=gefyra.configuration.default_configuration,
 ) -> bool:
-    from gefyra.local.bridge import (
-        handle_delete_interceptrequest,
-        get_all_interceptrequests,
-    )
-
-    ireqs = get_all_interceptrequests(config)
+    ireqs = gefyra.local.bridge.get_all_interceptrequests(config)
     for ireq in ireqs:
         name = ireq["metadata"]["name"]
         logger.info(f"Removing Bridge {name}")
-        handle_delete_interceptrequest(config, name)
+        gefyra.local.bridge.handle_delete_interceptrequest(config, name)
     return True

@@ -1,16 +1,18 @@
-import os
-import sys
-from datetime import datetime
-from typing import List, Optional
+from gefyra import lazy
 
-from docker.models.containers import Container
+os = lazy("os")
+sys = lazy("sys")
+datetime = lazy("datetime")
+typing = lazy("typing")
 
-from gefyra.cluster.utils import decode_secret
-from gefyra.configuration import ClientConfiguration
-from gefyra.local.cargoimage.Dockerfile import Dockerfile, Dockerfile_windows
+docker = lazy("docker")
+
+gefyra = lazy("gefyra")
 
 
-def get_processed_paths(base_path: str, volumes: List[str]) -> Optional[List[str]]:
+def get_processed_paths(
+    base_path: str, volumes: typing.List[str]
+) -> typing.Optional[typing.List[str]]:
     if volumes is None:
         return None
     results = []
@@ -22,15 +24,15 @@ def get_processed_paths(base_path: str, volumes: List[str]) -> Optional[List[str
     return results
 
 
-def get_cargo_connection_data(config: ClientConfiguration):
+def get_cargo_connection_data(config: gefyra.configuration.ClientConfiguration):
     cargo_connection_secret = config.K8S_CORE_API.read_namespaced_secret(
         name="gefyra-cargo-connection", namespace=config.NAMESPACE
     )
-    return decode_secret(cargo_connection_secret.data)
+    return gefyra.cluster.utils.decode_secret(cargo_connection_secret.data)
 
 
 def build_cargo_image(
-    config: ClientConfiguration,
+    config: gefyra.configuration.ClientConfiguration,
     wireguard_ip: str,
     private_key: str,
     dns: str,
@@ -46,14 +48,14 @@ def build_cargo_image(
         "ENDPOINT": endpoint,
         "ALLOWED_IPS": allowed_ips,
     }
-    tag = f"{config.CARGO_CONTAINER_NAME}:{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    tag = f"{config.CARGO_CONTAINER_NAME}:{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
     # check for Cargo updates
     config.DOCKER.images.pull("quay.io/gefyra/cargo")
     # build this instance
     if sys.platform == "win32":
-        _Dockerfile = Dockerfile_windows
+        _Dockerfile = gefyra.local.cargoimage.Dockerfile.Dockerfile_windows
     else:
-        _Dockerfile = Dockerfile
+        _Dockerfile = gefyra.local.cargoimage.Dockerfile.Dockerfile
     image, build_logs = config.DOCKER.images.build(
         fileobj=_Dockerfile, rm=True, forcerm=True, buildargs=build_args, tag=tag
     )
@@ -61,7 +63,9 @@ def build_cargo_image(
 
 
 def get_container_ip(
-    config: ClientConfiguration, container: Container = None, container_id: str = None
+    config: gefyra.configuration.ClientConfiguration,
+    container: docker.models.containers.Container = None,
+    container_id: str = None,
 ) -> str:
     assert container or container_id, "Either container or id must be specified!"
 
@@ -77,7 +81,9 @@ def get_container_ip(
 
 
 def handle_docker_stop_container(
-    config: ClientConfiguration, container: Container = None, container_id: str = None
+    config: gefyra.configuration.ClientConfiguration,
+    container: docker.models.containers.Container = None,
+    container_id: str = None,
 ):
     """Stop docker container, either `container` or `container_id` must be specified.
 
@@ -96,7 +102,9 @@ def handle_docker_stop_container(
 
 
 def handle_docker_remove_container(
-    config: ClientConfiguration, container: Container = None, container_id: str = None
+    config: gefyra.configuration.ClientConfiguration,
+    container: docker.models.containers.Container = None,
+    container_id: str = None,
 ):
     """Stop docker container, either `container` or `container_id` must be specified.
 
@@ -115,14 +123,14 @@ def handle_docker_remove_container(
 
 
 def handle_docker_create_container(
-    config: ClientConfiguration, image: str, **kwargs
-) -> Container:
+    config: gefyra.configuration.ClientConfiguration, image: str, **kwargs
+) -> docker.models.containers.Container:
     return config.DOCKER.containers.create(image, **kwargs)
 
 
 def handle_docker_run_container(
-    config: ClientConfiguration, image: str, **kwargs
-) -> Container:
+    config: gefyra.configuration.ClientConfiguration, image: str, **kwargs
+) -> docker.models.containers.Container:
     # if detach=True is in kwargs, this will return a container; otherwise the container logs (see
     # https://docker-py.readthedocs.io/en/stable/containers.html#docker.models.containers.ContainerCollection.run)
     # TODO: handle exception(s):

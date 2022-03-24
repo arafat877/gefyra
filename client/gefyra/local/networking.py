@@ -1,26 +1,30 @@
-import logging
-from random import choice
+from gefyra import lazy
 
-from docker.errors import NotFound
-from docker.models.networks import Network
-from docker.types import IPAMConfig, IPAMPool
+logging = lazy("logging")
+random = lazy("random")
 
-from gefyra.configuration import ClientConfiguration
+docker = lazy("docker")
+
+gefyra = lazy("gefyra")
 
 logger = logging.getLogger(__name__)
 
 
 def handle_create_network(
-    config: ClientConfiguration, network_address: str, aux_addresses: dict
-) -> Network:
+    config: gefyra.configuration.ClientConfiguration,
+    network_address: str,
+    aux_addresses: dict,
+) -> docker.models.networks.Network:
     try:
         network = config.DOCKER.networks.get(config.NETWORK_NAME)
         logger.info("Gefyra network already exists")
         return network
-    except NotFound:
+    except docker.errors.NotFound:
         pass
-    ipam_pool = IPAMPool(subnet=f"{network_address}/24", aux_addresses=aux_addresses)
-    ipam_config = IPAMConfig(pool_configs=[ipam_pool])
+    ipam_pool = docker.types.IPAMPool(
+        subnet=f"{network_address}/24", aux_addresses=aux_addresses
+    )
+    ipam_config = docker.types.IPAMConfig(pool_configs=[ipam_pool])
     network = config.DOCKER.networks.create(
         config.NETWORK_NAME, driver="bridge", ipam=ipam_config
     )
@@ -28,7 +32,7 @@ def handle_create_network(
     return network
 
 
-def handle_remove_network(config: ClientConfiguration) -> None:
+def handle_remove_network(config: gefyra.configuration.ClientConfiguration) -> None:
     """Removes all docker networks with the given name."""
     # we would need the id to identify the network unambiguously, so we just remove all networks that can be found with
     # the given name, under the assumption that no other docker network inadvertently uses the same name
@@ -41,7 +45,7 @@ def handle_remove_network(config: ClientConfiguration) -> None:
 
 
 def kill_remainder_container_in_network(
-    config: ClientConfiguration, network_name
+    config: gefyra.configuration.ClientConfiguration, network_name
 ) -> None:
     """Kills all containers from this network"""
     try:
@@ -50,11 +54,11 @@ def kill_remainder_container_in_network(
         for container in containers:
             c = config.DOCKER.containers.get(container)
             c.kill()
-    except NotFound:
+    except docker.errors.NotFound:
         pass
 
 
-def get_free_class_c_netaddress(config: ClientConfiguration):
+def get_free_class_c_netaddress(config: gefyra.configuration.ClientConfiguration):
     taken_netaddress = []
     for network in config.DOCKER.networks.list():
         try:
@@ -65,5 +69,5 @@ def get_free_class_c_netaddress(config: ClientConfiguration):
             continue
     class_c = filter(lambda s: s.startswith("192.168."), taken_netaddress)
     exc_tho = [int(o.split(".")[2]) for o in class_c]
-    tho = choice([i for i in range(10, 200) if i not in exc_tho])
+    tho = random.choice([i for i in range(10, 200) if i not in exc_tho])
     return f"192.168.{tho}.0"

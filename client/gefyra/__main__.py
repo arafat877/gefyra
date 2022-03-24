@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
-import argparse
-import logging
+from gefyra import lazy
+
+argparse = lazy("argparse")
+logging = lazy("logging")
+
 
 logger = logging.getLogger("gefyra")
 parser = argparse.ArgumentParser(

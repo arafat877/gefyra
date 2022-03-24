@@ -1,14 +1,16 @@
-import logging
+from gefyra import lazy
 
-from gefyra.configuration import default_configuration
+logging = lazy("logging")
 
-from .utils import stopwatch
+gefyra = lazy("gefyra")
+
+from .utils import stopwatch  # noqa
 
 logger = logging.getLogger(__name__)
 
 
 @stopwatch
-def down(config=default_configuration) -> bool:
+def down(config=gefyra.configuration.default_configuration) -> bool:
     from gefyra.cluster.manager import uninstall_operator
     from gefyra.local.cargo import remove_cargo_container
     from gefyra.local.networking import (

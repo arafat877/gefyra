@@ -1,8 +1,14 @@
-import logging
-import os
+from gefyra import lazy
 
-from gefyra.configuration import default_configuration
-from .utils import stopwatch
+logging = lazy("logging")
+os = lazy("os")
+
+kubernetes = lazy("kubernetes")
+docker = lazy("docker")
+
+gefyra = lazy("gefyra")
+
+from .utils import stopwatch  # noqa
 
 
 logger = logging.getLogger(__name__)
@@ -20,21 +26,16 @@ def run(
     namespace: str = "default",
     env: list = None,
     env_from: str = None,
-    config=default_configuration,
+    config=gefyra.configuration.default_configuration,
 ) -> bool:
-    from kubernetes.client import ApiException
-    from gefyra.cluster.utils import get_env_from_pod_container
-    from gefyra.local.bridge import deploy_app_container
-    from ..local.utils import get_processed_paths
-    from docker.errors import NotFound, APIError
 
     dns_search = f"{namespace}.svc.cluster.local"
     try:
         config.DOCKER.networks.get(config.NETWORK_NAME)
-    except NotFound:
+    except docker.errors.NotFound:
         logger.error("Gefyra network not found. Please run 'gefyra up' first.")
         return False
-    volumes = get_processed_paths(os.getcwd(), volumes)
+    volumes = gefyra.local.get_processed_paths(os.getcwd(), volumes)
     #
     # 1. get the ENV together a) from a K8s container b) from override
     #
@@ -42,7 +43,7 @@ def run(
     try:
         if env_from:
             env_from_pod, env_from_container = env_from.split("/")
-            raw_env = get_env_from_pod_container(
+            raw_env = gefyra.cluster.utils.get_env_from_pod_container(
                 config, env_from_pod, namespace, env_from_container
             )
             logger.debug("ENV from pod/container is:\n" + raw_env)
@@ -51,7 +52,7 @@ def run(
                 for k in [arg.split("=") for arg in raw_env.split("\n")]
                 if len(k) > 1
             }
-    except ApiException as e:
+    except kubernetes.client.ApiException as e:
         logger.error(f"Cannot copy environment from Pod: {e.reason}")
         return False
     if env:
@@ -64,7 +65,7 @@ def run(
     # 2. deploy the requested container to Gefyra
     #
     try:
-        container = deploy_app_container(
+        container = gefyra.local.bridge.deploy_app_container(
             config,
             image,
             name,
@@ -75,7 +76,7 @@ def run(
             auto_remove,
             dns_search,
         )
-    except APIError as e:
+    except docker.errors.APIError as e:
         if e.status_code == 409:
             logger.warning("This container is already deployed and running")
             return True

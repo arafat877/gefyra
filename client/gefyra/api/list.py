@@ -1,16 +1,20 @@
-import logging
-from typing import List
+from gefyra import lazy
 
-from gefyra.configuration import default_configuration
+logging = lazy("logging")
+typing = lazy("typing")
 
-from .utils import stopwatch
+gefyra = lazy("gefyra")
+
+from .utils import stopwatch  # noqa
 
 
 logger = logging.getLogger(__name__)
 
 
 @stopwatch
-def list_interceptrequests(config=default_configuration) -> List[str]:
+def list_interceptrequests(
+    config=gefyra.configuration.default_configuration,
+) -> typing.List[str]:
     from gefyra.local.bridge import get_all_interceptrequests
 
     ireqs = []

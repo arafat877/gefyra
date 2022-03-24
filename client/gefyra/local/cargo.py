@@ -1,24 +1,20 @@
-import io
-import logging
-import os
-import tarfile
+from gefyra import lazy
 
-from docker.errors import NotFound
-from docker.models.containers import Container
+logging = lazy("logging")
+io = lazy("io")
+os = lazy("os")
+tarfile = lazy("tarfile")
 
-from gefyra.configuration import ClientConfiguration
-from gefyra.local.utils import (
-    build_cargo_image,
-    handle_docker_create_container,
-    handle_docker_remove_container,
-)
+docker = lazy("docker")
+
+gefyra = lazy("gefyra")
 
 logger = logging.getLogger(__name__)
 
 
 def create_cargo_container(
-    config: ClientConfiguration, cargo_connection_data: dict
-) -> Container:
+    config: gefyra.configuration.ClientConfiguration, cargo_connection_data: dict
+) -> docker.models.containers.Container:
     wireguard_ip = f"{cargo_connection_data['Interface.Address']}"
     private_key = cargo_connection_data["Interface.PrivateKey"]
     dns = (
@@ -29,7 +25,7 @@ def create_cargo_container(
     allowed_ips = cargo_connection_data["Peer.AllowedIPs"].split(",")[0]
 
     # build image
-    image, build_logs = build_cargo_image(
+    image, build_logs = gefyra.local.utils.build_cargo_image(
         config,
         wireguard_ip=wireguard_ip,
         private_key=private_key,
@@ -41,7 +37,7 @@ def create_cargo_container(
     # we only have one tag
     image_name_and_tag = image.tags[0]
     # run image
-    container = handle_docker_create_container(
+    container = gefyra.local.utils.handle_docker_create_container(
         config,
         image_name_and_tag,
         detach=True,
@@ -55,10 +51,12 @@ def create_cargo_container(
     return container
 
 
-def remove_cargo_container(config: ClientConfiguration):
+def remove_cargo_container(config: gefyra.configuration.ClientConfiguration):
     try:
-        handle_docker_remove_container(config, container_id=config.CARGO_CONTAINER_NAME)
-    except NotFound:
+        gefyra.local.utils.handle_docker_remove_container(
+            config, container_id=config.CARGO_CONTAINER_NAME
+        )
+    except docker.errors.NotFound:
         pass
 
 
@@ -66,7 +64,7 @@ def get_cargo_ip_from_netaddress(network_address: str) -> str:
     return ".".join(network_address.split(".")[:3]) + ".149"
 
 
-def get_syncdown_config(config: ClientConfiguration) -> str:
+def get_syncdown_config(config: gefyra.configuration.ClientConfiguration) -> str:
     fh = io.BytesIO()
     cargo = config.DOCKER.containers.get(config.CARGO_CONTAINER_NAME)
     bits, stat = cargo.get_archive("/etc/syncdown.conf")
@@ -78,7 +76,9 @@ def get_syncdown_config(config: ClientConfiguration) -> str:
     return fconfig
 
 
-def put_syncdown_config(config: ClientConfiguration, syncdown_configuration: str):
+def put_syncdown_config(
+    config: gefyra.configuration.ClientConfiguration, syncdown_configuration: str
+):
     cargo = config.DOCKER.containers.get(config.CARGO_CONTAINER_NAME)
     source_f = io.BytesIO()
     source_f.write(syncdown_configuration.encode())
@@ -92,7 +92,9 @@ def put_syncdown_config(config: ClientConfiguration, syncdown_configuration: str
     cargo.put_archive("/etc/", fh)
 
 
-def delete_syncdown_job(config: ClientConfiguration, bridge_name: str):
+def delete_syncdown_job(
+    config: gefyra.configuration.ClientConfiguration, bridge_name: str
+):
     configfile = get_syncdown_config(config)
     old_config = configfile.split("\n")
     new_config = []
@@ -104,7 +106,7 @@ def delete_syncdown_job(config: ClientConfiguration, bridge_name: str):
 
 
 def add_syncdown_job(
-    config: ClientConfiguration,
+    config: gefyra.configuration.ClientConfiguration,
     bridge_name: str,
     to_container_name: str,
     from_pod: str,
