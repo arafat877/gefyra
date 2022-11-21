@@ -159,6 +159,8 @@ You can easily try Gefyra yourself following this small example.
 ### Prerequisites
 1) Follow the [installation](https://gefyra.dev/installation) for your preferred platform.
 
+2) Make sure you have Docker or a docker client compatible container runtime installed.
+
 2) Create a local Kubernetes cluster with `k3d` like so:    
 **< v5** `k3d cluster create mycluster --agents 1 -p 8080:80@agent[0] -p 31820:31820/UDP@agent[0]`  
 **>= v5** `k3d cluster create mycluster --agents 1 -p 8080:80@agent:0 -p 31820:31820/UDP@agent:0`  
